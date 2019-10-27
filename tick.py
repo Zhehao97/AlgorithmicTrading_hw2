@@ -9,28 +9,36 @@ from simtools import log_message
 # Lee-Ready tick strategy simulator
 
 # Record a trade in our trade array
-def record_trade( trade_df, idx, tick, position, pnl, trade_px, trade_qty, trade_type='-', side='-' ):
+def record_trade( trade_df, idx, tick, stock_px, position, pnl, trade_px, trade_qty, trade_type='-', side='-' ):
     #print( "Trade! {} {} {} {}".format( idx, trade_px, trade_qty ) )
-    trade_df.loc[ idx ] = [ tick, position, pnl, trade_px, trade_qty, trade_type, side ]
+    trade_df.loc[ idx ] = [ tick, stock_px, position, pnl, trade_px, trade_qty, trade_type, side ]
 
     return
 
 # TODO: calc P&L and other statistics
-def trade_statistics( trade_df, total_pnl ):
+def trade_statistics( trade_df ):
+
     # TODO: calculate intraday P&L (time series). P&L has two components. Roughly:
     #       1. realized "round trip" P&L  sum of (sell price - buy price) * shares traded
     #       2. unrealized P&L of open position:  quantity held * (current price - avg price)
-    intraday_pnl = trade_df.loc['pnl']
-    # TODO: calculate maximum position (both long and short)
-    max_long_position = trade_df.loc['position'].max()
-    max_short_position = trade_df.loc['position'].min()
+    adj_trade_df = adj_trades = trade_df[trade_df['trade_price'] != 0]
+    intraday_pnl = adj_trade_df['current_pnl']
+
+    # TODO: calculate maximum position (both long and short) and ending position
+    max_long_position = adj_trade_df['current_position'].max()
+    max_short_position = adj_trade_df['current_position'].min()
+    ending_position = adj_trade_df['current_position'][-1]
+
     # TODO: calculate worst and best intraday P&L
-    best_pnl = trade_df.loc['pnl'].max()
-    worst_pnl = trade_df.loc['pnl'].min()
+    best_pnl = intraday_pnl.max()
+    worst_pnl = intraday_pnl.min()
+
     # TODO: calculate total P&L
+    total_pnl = intraday_pnl.sum()
     return { 'intraday_PNL':intraday_pnl,
              'max_long_Position':max_long_position,
              'max_short_Position':max_short_position,
+             'ending_Position':ending_position,
              'best_PNL':best_pnl,
              'worst_PNL':worst_pnl,
              'total_PNL':total_pnl }
@@ -61,7 +69,7 @@ def algo_loop( trading_day ):
     risk_factors = pd.Series( index=trading_day.index )
     
     # let's set up a container to hold trades. preinitialize with the index
-    trades = pd.DataFrame( columns = [ 'tick', 'position', 'pnl', 'price', 'shares', 'trade_type', 'side' ], index=trading_day.index )
+    trades = pd.DataFrame( columns = [ 'current_tick', 'stock_price', 'current_position', 'current_pnl', 'trade_price', 'trade_shares', 'trade_type', 'trade_side' ], index=trading_day.index )
     
     # MAIN EVENT LOOP
     live_order_index = trading_day.index[0]
@@ -151,7 +159,7 @@ def algo_loop( trading_day ):
                     current_pos = current_pos + fill_size
 
                     # record trading data (previous index)
-                    record_trade(trades, live_order_index, prev_tick, current_pos, current_pnl, live_order_price, fill_size, 'p', order_side)
+                    record_trade(trades, live_order_index, prev_tick, last_price, current_pos, current_pnl, live_order_price, fill_size, 'p', order_side)
                     total_pnl += current_pnl
                                      
                     # update start price
@@ -175,7 +183,7 @@ def algo_loop( trading_day ):
                     current_pos = current_pos + fill_size
                     
                     # record trading data
-                    record_trade(trades, live_order_index, prev_tick, current_pos, current_pnl, live_order_price, fill_size, 'p', order_side)
+                    record_trade(trades, live_order_index, prev_tick, last_price, current_pos, current_pnl, live_order_price, fill_size, 'p', order_side)
                     total_pnl += current_pnl
 
                     # update start price
@@ -226,7 +234,7 @@ def algo_loop( trading_day ):
             # collect our data
             fair_values[ index ] = fair_value
             midpoints[ index ] = midpoint
-            tick_factors[ index ] = tick_factor
+            #tick_factors[ index ] = tick_factor
             # TODO: add collectors for new factors
             # risk_factors[ index ] =
 
@@ -251,7 +259,7 @@ def algo_loop( trading_day ):
                     current_pos = current_pos + new_trade_size # long shares to close previous short position or to open new position
 
                     # now place our aggressive order and record trade information
-                    record_trade(trades, index, tick_signal, current_pos, current_pnl, new_trade_price, new_trade_size, 'a', order_side)
+                    record_trade(trades, index, tick_signal, last_price, current_pos, current_pnl, new_trade_price, new_trade_size, 'a', order_side)
                     total_pnl += current_pnl
 
                     # update start price
@@ -268,7 +276,7 @@ def algo_loop( trading_day ):
                 else: # if fair price is > bid, buy passive
                     # update P&L
                     current_pnl = current_pos * (last_price - start_price)
-                    record_trade(trades, index, tick_signal, current_pos, current_pnl, 0, 0)
+                    record_trade(trades, index, tick_signal, last_price, current_pos, current_pnl, 0, 0)
 
                     # send limit order
                     live_order_index = index
@@ -290,7 +298,7 @@ def algo_loop( trading_day ):
                     current_pos = current_pos + new_trade_size # short shares to close previous long position or to open new position
 
                     # now place our aggressive order and record trade information
-                    record_trade(trades, index, tick_signal, current_pos, current_pnl, new_trade_price, new_trade_size, 'a', order_side)
+                    record_trade(trades, index, tick_signal, last_price, current_pos, current_pnl, new_trade_price, new_trade_size, 'a', order_side)
                     total_pnl += current_pnl
 
                     # update start price
@@ -307,7 +315,7 @@ def algo_loop( trading_day ):
                 else: # if fair price is < ask, sell passive
                     # update P&L
                     current_pnl = current_pos * (last_price - start_price)
-                    record_trade(trades, index, tick_signal, current_pos, current_pnl, 0, 0)
+                    record_trade(trades, index, tick_signal, last_price, current_pos, current_pnl, 0, 0)
 
                     # send limit order
                     live_order_index = index
@@ -318,7 +326,7 @@ def algo_loop( trading_day ):
             else:
                 # no order here. for now just continue
                 current_pnl = current_pos * (last_price - start_price)
-                record_trade(trades, index, tick_signal, current_pos, current_pnl, 0, 0)
+                record_trade(trades, index, tick_signal, last_price, current_pos, current_pnl, 0, 0)
                 continue
 
         prev_index = index
@@ -338,7 +346,5 @@ def algo_loop( trading_day ):
     # assemble results and return
     # TODO: add P&L
     return { 'trades' : trades,
-             'total_pnl' : total_pnl,
-             'tick_factors' : tick_factors,
-             'risk_factors' : risk_factors
+             'total_pnl' : total_pnl
            }
