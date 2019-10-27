@@ -9,9 +9,9 @@ from simtools import log_message
 # Lee-Ready tick strategy simulator
 
 # Record a trade in our trade array
-def record_trade( trade_df, idx, position, pnl, trade_px, trade_qty, trade_type='-', side='-' ):
+def record_trade( trade_df, idx, tick, position, pnl, trade_px, trade_qty, trade_type='-', side='-' ):
     #print( "Trade! {} {} {} {}".format( idx, trade_px, trade_qty ) )
-    trade_df.loc[ idx ] = [ position, pnl, trade_px, trade_qty, trade_type, side ]
+    trade_df.loc[ idx ] = [ tick, position, pnl, trade_px, trade_qty, trade_type, side ]
 
     return
 
@@ -61,10 +61,10 @@ def algo_loop( trading_day ):
     risk_factors = pd.Series( index=trading_day.index )
     
     # let's set up a container to hold trades. preinitialize with the index
-    trades = pd.DataFrame( columns = [ 'position', 'pnl', 'price', 'shares', 'trade_type', 'side' ], index=trading_day.index )
+    trades = pd.DataFrame( columns = [ 'tick', 'position', 'pnl', 'price', 'shares', 'trade_type', 'side' ], index=trading_day.index )
     
     # MAIN EVENT LOOP
-    prev_index = trading_day.index[0]
+    live_order_index = trading_day.index[0]
 
     start_price = 0.0 # price when open the position
     prev_price = 0
@@ -151,7 +151,7 @@ def algo_loop( trading_day ):
                     current_pos = current_pos + fill_size
 
                     # record trading data (previous index)
-                    record_trade(trades, prev_index, current_pos, current_pnl, live_order_price, fill_size, 'p', order_side)
+                    record_trade(trades, live_order_index, prev_tick, current_pos, current_pnl, live_order_price, fill_size, 'p', order_side)
                     total_pnl += current_pnl
                                      
                     # update start price
@@ -175,7 +175,7 @@ def algo_loop( trading_day ):
                     current_pos = current_pos + fill_size
                     
                     # record trading data
-                    record_trade(trades, prev_index, current_pos, current_pnl, live_order_price, fill_size, 'p', order_side)
+                    record_trade(trades, live_order_index, prev_tick, current_pos, current_pnl, live_order_price, fill_size, 'p', order_side)
                     total_pnl += current_pnl
 
                     # update start price
@@ -251,7 +251,7 @@ def algo_loop( trading_day ):
                     current_pos = current_pos + new_trade_size # long shares to close previous short position or to open new position
 
                     # now place our aggressive order and record trade information
-                    record_trade(trades, index, current_pos, current_pnl, new_trade_price, new_trade_size, 'a', order_side)
+                    record_trade(trades, index, tick_signal, current_pos, current_pnl, new_trade_price, new_trade_size, 'a', order_side)
                     total_pnl += current_pnl
 
                     # update start price
@@ -268,9 +268,10 @@ def algo_loop( trading_day ):
                 else: # if fair price is > bid, buy passive
                     # update P&L
                     current_pnl = current_pos * (last_price - start_price)
-                    record_trade(trades, index, current_pos, current_pnl, 0, 0)
+                    record_trade(trades, index, tick_signal, current_pos, current_pnl, 0, 0)
 
                     # send limit order
+                    live_order_index = index
                     live_order_price = fair_value
                     live_order_quantity = tick_signal * trade_size # = +100
                     live_order = True
@@ -289,7 +290,7 @@ def algo_loop( trading_day ):
                     current_pos = current_pos + new_trade_size # short shares to close previous long position or to open new position
 
                     # now place our aggressive order and record trade information
-                    record_trade(trades, index, current_pos, current_pnl, new_trade_price, new_trade_size, 'a', order_side)
+                    record_trade(trades, index, tick_signal, current_pos, current_pnl, new_trade_price, new_trade_size, 'a', order_side)
                     total_pnl += current_pnl
 
                     # update start price
@@ -306,9 +307,10 @@ def algo_loop( trading_day ):
                 else: # if fair price is < ask, sell passive
                     # update P&L
                     current_pnl = current_pos * (last_price - start_price)
-                    record_trade(trades, index, current_pos, current_pnl, 0, 0)
+                    record_trade(trades, index, tick_signal, current_pos, current_pnl, 0, 0)
 
                     # send limit order
+                    live_order_index = index
                     live_order_price = fair_value
                     live_order_quantity = tick_signal * trade_size # = -100
                     live_order = True
@@ -316,7 +318,7 @@ def algo_loop( trading_day ):
             else:
                 # no order here. for now just continue
                 current_pnl = current_pos * (last_price - start_price)
-                record_trade(trades, index, current_pos, current_pnl, 0, 0)
+                record_trade(trades, index, tick_signal, current_pos, current_pnl, 0, 0)
                 continue
 
         prev_index = index
