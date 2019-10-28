@@ -21,7 +21,7 @@ def trade_statistics( trade_df ):
     # TODO: calculate intraday P&L (time series). P&L has two components. Roughly:
     #       1. realized "round trip" P&L  sum of (sell price - buy price) * shares traded
     #       2. unrealized P&L of open position:  quantity held * (current price - avg price)
-    adj_trade_df = adj_trades = trade_df[trade_df['trade_price'] != 0]
+    adj_trade_df = trade_df[trade_df['trade_price'] != 0]
     intraday_pnl = adj_trade_df['current_pnl']
 
     # TODO: calculate maximum position (both long and short) and ending position
