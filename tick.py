@@ -89,7 +89,6 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
     live_order_price = 0.0
     live_order_quantity = 0.0
 
-
     # other order and market variables
 
     # fair value pricing variables
@@ -194,7 +193,7 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
             # TRADING LOGIC
 
             # update signal
-            signal = this_tick
+            signal = np.sign(last_price - prev_price)
 
             # LONG POSITION
             if current_pos > 0: # long position
