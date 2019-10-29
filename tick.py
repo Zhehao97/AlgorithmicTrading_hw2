@@ -20,27 +20,28 @@ def trade_statistics( trade_df ):
     # TODO: calculate intraday P&L (time series). P&L has two components. Roughly:
     #       1. realized "round trip" P&L  sum of (sell price - buy price) * shares traded
     #       2. unrealized P&L of open position:  quantity held * (current price - avg price)
-    adj_trade_df = trade_df[trade_df['trade_price'] != 0]
-    intraday_pnl = adj_trade_df['current_pnl']
+    intraday_pnl = trade_df[['position', 'unrealized_pnl', 'realized_pnl']]
 
     # TODO: calculate maximum position (both long and short) and ending position
-    max_long_position = adj_trade_df['current_position'].max()
-    max_short_position = adj_trade_df['current_position'].min()
-    ending_position = adj_trade_df['current_position'][-1]
+    max_long_position = trade_df['position'].max()
+    max_short_position = trade_df['position'].min()
+    ending_position = trade_df['position'][-1]
 
     # TODO: calculate worst and best intraday P&L
-    best_pnl = intraday_pnl.max()
-    worst_pnl = intraday_pnl.min()
+    best_unrealized_pnl = trade_df['unrealized_pnl'].max()
+    worst_unrealized_pnl = trade_df['unrealized_pnl'].min()
 
     # TODO: calculate total P&L
-    total_pnl = intraday_pnl.sum()
-    return { 'intraday_PNL':intraday_pnl,
+    total_pnl = trade_df['realized_pnl'][-1]
+
+    return { 'PNL':intraday_pnl,
              'max_long_Position':max_long_position,
              'max_short_Position':max_short_position,
              'ending_Position':ending_position,
-             'best_PNL':best_pnl,
-             'worst_PNL':worst_pnl,
-             'total_PNL':total_pnl }
+             'best_unrealized_PNL':best_unrealized_pnl,
+             'worst_unrealized_PNL':worst_unrealized_pnl,
+             'total_realized_PNL':total_pnl
+             }
 
 # Get next order quantity
 # TODO: figure out what our order size is
@@ -49,7 +50,7 @@ def trade_statistics( trade_df ):
 
     
 # MAIN ALGO LOOP
-def algo_loop( trading_day ):
+def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
     log_message( 'Beginning Tick Strategy run' )
     #log_message( 'TODO: remove this message. Simply a test to see how closely you are reading this code' )
 
@@ -88,7 +89,6 @@ def algo_loop( trading_day ):
     live_order_price = 0.0
     live_order_quantity = 0.0
 
-
     # other order and market variables
 
     # fair value pricing variables
@@ -97,8 +97,8 @@ def algo_loop( trading_day ):
     
     # define our accumulator for the tick EMA
     message_type = 0   
-    tick_coef = 1
-    tick_window = 20
+    #tick_coef = 1
+    #tick_window = 20
     tick_factor = 0
     tick_ema_alpha = 2 / ( tick_window + 1 )
     prev_tick = 0
@@ -193,7 +193,7 @@ def algo_loop( trading_day ):
             # TRADING LOGIC
 
             # update signal
-            signal = this_tick
+            signal = np.sign(last_price - prev_price)
 
             # LONG POSITION
             if current_pos > 0: # long position
@@ -223,6 +223,9 @@ def algo_loop( trading_day ):
                         live_order_quantity = 0.0
                         live_order_price = 0.0
                         live_order = False
+
+                        continue
+
                     elif (order_side == 's') and (last_price >= live_order_price):
                         order_type = 'Pas'
 
@@ -244,6 +247,9 @@ def algo_loop( trading_day ):
                         live_order = False
                         live_order_price = 0.0
                         live_order_quantity = 0.0
+
+                        continue
+
                 # TODO: determine if we want to buy or sell
                 if signal == 1: # if signal appears and we hold a short position or zero position, buy!
                     order_side = 'b'
@@ -273,6 +279,7 @@ def algo_loop( trading_day ):
                         live_order_quantity = 0.0
                         live_order_price = 0.0
                         live_order = False
+
                     # if fair price is > bid, buy passive
                     else:
                         # order_type = 'Pas'
@@ -290,6 +297,7 @@ def algo_loop( trading_day ):
                         live_order_quantity = 1 * trade_size  # = +100
                         live_order_price = fair_value
                         live_order = True
+
                 elif signal == -1:
                     order_side = 's'
 
@@ -316,6 +324,7 @@ def algo_loop( trading_day ):
                         live_order_quantity = 0.0
                         live_order_price = 0.0
                         live_order = False
+
                     # if fair price is < ask, sell passive
                     else:
                         # order_type = 'Pas'
@@ -336,6 +345,7 @@ def algo_loop( trading_day ):
 
                 else: # signal = 0
                     continue
+
             # SHORT POSITION
             elif current_pos < 0: #short position
 
@@ -362,6 +372,9 @@ def algo_loop( trading_day ):
                         live_order_quantity = 0.0
                         live_order_price = 0.0
                         live_order = False
+
+                        continue
+
                     elif (order_side == 's') and (last_price >= live_order_price):
                         order_type = 'Pas'
 
@@ -385,6 +398,9 @@ def algo_loop( trading_day ):
                         live_order = False
                         live_order_price = 0.0
                         live_order_quantity = 0.0
+
+                        continue
+
                 # TODO: determine if we want to buy or sell
                 if signal == 1:  # if signal appears and we hold a short position or zero position, buy!
                     order_side = 'b'
@@ -412,6 +428,7 @@ def algo_loop( trading_day ):
                         live_order_quantity = 0.0
                         live_order_price = 0.0
                         live_order = False
+
                     # if fair price is > bid, buy passive
                     else:
                         # order_type = 'Pas'
@@ -429,6 +446,7 @@ def algo_loop( trading_day ):
                         live_order_quantity = 1 * trade_size  # = +100
                         live_order_price = fair_value
                         live_order = True
+
                 elif signal == -1:
                     order_side = 's'
 
@@ -457,6 +475,7 @@ def algo_loop( trading_day ):
                         live_order_quantity = 0.0
                         live_order_price = 0.0
                         live_order = False
+
                     # if fair price is < ask, sell passive
                     else:
                         # order_type = 'Pas'
@@ -474,8 +493,10 @@ def algo_loop( trading_day ):
                         live_order_quantity = 1 * trade_size  # = 100
                         live_order_price = fair_value
                         live_order = True
+
                 else: # signal = 0
                     continue
+
             # ZERO POSITION
             else: # position = 0
 
@@ -509,6 +530,8 @@ def algo_loop( trading_day ):
                         live_order_price = 0.0
                         live_order = False
 
+                        continue
+
                     elif (order_side == 's') and (last_price >= live_order_price):
                         order_type = 'Pas'
 
@@ -532,6 +555,8 @@ def algo_loop( trading_day ):
                         live_order = False
                         live_order_price = 0.0
                         live_order_quantity = 0.0
+
+                        continue
 
                 # TODO: determine if we want to buy or sell
                 if signal == 1: # if signal appears and we hold a short position or zero position, buy!
@@ -561,6 +586,7 @@ def algo_loop( trading_day ):
                         live_order_quantity = 0.0
                         live_order_price = 0.0
                         live_order = False
+
                     # if fair price is > bid, buy passive
                     else:
                         # order_type = 'Pas'
@@ -578,6 +604,7 @@ def algo_loop( trading_day ):
                         live_order_quantity = 1 * trade_size  # = +100
                         live_order_price = fair_value
                         live_order = True
+
                 elif signal == -1:
                     order_side = 's'
 
@@ -606,6 +633,7 @@ def algo_loop( trading_day ):
                         live_order_quantity = 0.0
                         live_order_price = 0.0
                         live_order = False
+
                     else:
                         # order_type = 'Pas'
                         # position unchanged
@@ -622,6 +650,7 @@ def algo_loop( trading_day ):
                         live_order_quantity = 1 * trade_size  # = -100
                         live_order_price = fair_value
                         live_order = True
+                        
                 else: # signal = 0
                     continue
 
