@@ -14,6 +14,13 @@ def record_trade( trade_df, idx, tick, fair_value, market_price, trade_price, av
     trade_df.loc[ idx ] = [ tick, fair_value, market_price, trade_price, avg_price, position, unrealized_pnl, realized_pnl, trade_shares, trade_type, trade_side ]
     return
 
+def calculate_unrealized_pnl(position, last_price, avg_price):
+    return position * (last_price - avg_price)
+
+def calculate_realized_pnl(realized_pnl, trade_size, order_price, avg_price):
+    realized_pnl = realized_pnl + trade_size * (order_price - avg_price)
+    return realized_pnl
+
 # TODO: calc P&L and other statistics
 def trade_statistics( trade_df ):
 
@@ -207,7 +214,7 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         current_pos = current_pos + abs(live_order_quantity)
 
                         # update avg(buy) price
-                        trade_count += trade_size
+                        trade_count += 1
                         avg_price = ( (trade_count - 1) * avg_price + live_order_price ) / trade_count
 
                         # update P&L
@@ -235,8 +242,8 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         # avg(buy) price unchanged
 
                         # update P&L
-                        unrealized_pnl = current_pos * (last_price - avg_price)
-                        realized_pnl = realized_pnl + trade_size * (live_order_price - avg_price)
+                        unrealized_pnl = calculate_unrealized_pnl(position=current_pos, last_price=last_price, avg_price=avg_price)
+                        realized_pnl = calculate_realized_pnl(realized_pnl=realized_pnl, trade_size=trade_size, order_price=live_order_price, avg_price=avg_price)
 
                         # now place our aggressive order and record trade information
                         record_trade(trade_df=trades, idx=index, tick=signal, fair_value=fair_value, market_price=last_price, trade_price=live_order_price, avg_price=avg_price,
@@ -263,11 +270,11 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         current_pos = current_pos + trade_size
 
                         # update avg(buy) price
-                        trade_count += trade_size
+                        trade_count += 1
                         avg_price = ( (trade_count - 1) * avg_price + ask_price ) / trade_count
 
                         # update P&L
-                        unrealized_pnl = current_pos * (last_price - avg_price)
+                        unrealized_pnl = calculate_unrealized_pnl(position=current_pos, last_price=last_price, avg_price=avg_price)
                         # realized_pnl unchanged
 
                         # now place our aggressive order and record trade information
@@ -312,8 +319,8 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         # avg(buy) price unchanged
 
                         # update P&L
-                        unrealized_pnl = current_pos * (last_price - avg_price)
-                        realized_pnl = realized_pnl + trade_size * (bid_price - avg_price)
+                        unrealized_pnl = calculate_unrealized_pnl(position=current_pos, last_price=last_price, avg_price=avg_price)
+                        realized_pnl = calculate_realized_pnl(realized_pnl=realized_pnl, trade_size=trade_size, order_price=bid_price, avg_price=avg_price)
 
                         # now place our aggressive order and record trade information
                         record_trade(trade_df=trades, idx=index, tick=signal, fair_value=fair_value, market_price=last_price, trade_price=bid_price, avg_price=avg_price,
@@ -333,7 +340,7 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         # avg(buy) price unchanged
 
                         # update P&L
-                        # unrealized_pnl = current_pos * (last_price - avg_price)
+                        # unrealized_pnl = calculate_unrealized_pnl(position=current_pos, last_price=last_price, avg_price=avg_price)
                         # realized_pnl unchanged
 
                         # don't need to record trade information
@@ -360,8 +367,8 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         # avg(sell) price unchanged
 
                         # update P&L
-                        unrealized_pnl = current_pos * (last_price - avg_price)
-                        realized_pnl = realized_pnl + trade_size * (live_order_price - avg_price)
+                        unrealized_pnl = calculate_unrealized_pnl(position=current_pos, last_price=last_price, avg_price=avg_price)
+                        realized_pnl = calculate_realized_pnl(realized_pnl=realized_pnl, trade_size=trade_size, order_price=live_order_price, avg_price=avg_price)
 
                         # now place our aggressive order and record trade information
                         record_trade(trade_df=trades, idx=index, tick=signal, fair_value=fair_value, market_price=last_price, trade_price=live_order_price, avg_price=avg_price,
@@ -386,7 +393,7 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         avg_price = ((trade_count - 1) * avg_price + live_order_price) / trade_count
 
                         # update P&L
-                        unrealized_pnl = current_pos * (last_price - avg_price)
+                        unrealized_pnl = calculate_unrealized_pnl(position=current_pos, last_price=last_price, avg_price=avg_price)
                         # realized_pnl unchanged
 
                         # now place our aggressive order and record trade information
@@ -416,8 +423,9 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         # avg(sell) price unchanged
 
                         # update P&L
-                        unrealized_pnl = current_pos * (last_price - avg_price)
-                        realized_pnl = realized_pnl + trade_size * (ask_price - avg_price)
+                        unrealized_pnl = calculate_unrealized_pnl(position=current_pos, last_price=last_price, avg_price=avg_price)
+                        realized_pnl = calculate_realized_pnl(realized_pnl=realized_pnl, trade_size=trade_size, order_price=ask_price, avg_price=avg_price)
+
 
                         # now place our aggressive order and record trade information
                         record_trade(trade_df=trades, idx=index, tick=signal, fair_value=fair_value, market_price=last_price, trade_price=ask_price, avg_price=avg_price,
@@ -437,7 +445,7 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         # avg(buy) price unchanged
 
                         # update P&L
-                        # unrealized_pnl = current_pos * (last_price - avg_price)
+                        # unrealized_pnl = calculate_unrealized_pnl(position=current_pos, last_price=last_price, avg_price=avg_price)
                         # realized_pnl unchanged
 
                         # don't need to record trade information
@@ -463,7 +471,7 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         avg_price = ((trade_count - 1) * avg_price + bid_price) / trade_count
 
                         # update P&L
-                        unrealized_pnl = current_pos * (last_price - avg_price)
+                        unrealized_pnl = calculate_unrealized_pnl(position=current_pos, last_price=last_price, avg_price=avg_price)
                         # realized_pnl unchanged
 
                         # now place our aggressive order and record trade information
@@ -484,7 +492,7 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         # avg(buy) price unchanged
 
                         # update P&L
-                        # unrealized_pnl = current_pos * (last_price - avg_price)
+                        # unrealized_pnl = calculate_unrealized_pnl(position=current_pos, last_price=last_price, avg_price=avg_price)
                         # realized_pnl unchanged
 
                         # don't need to record trade information
@@ -513,11 +521,11 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         current_pos = current_pos + abs(live_order_quantity)
 
                         # update avg(buy) price
-                        trade_count += trade_size
+                        trade_count += 1
                         avg_price = ( (trade_count - 1) * avg_price + live_order_price ) / trade_count
 
                         # update P&L
-                        unrealized_pnl = current_pos * (last_price - avg_price)
+                        unrealized_pnl = calculate_unrealized_pnl(position=current_pos, last_price=last_price, avg_price=avg_price)
                         # realized_pnl unchanged
 
                         # now place our aggressive order and record trade information
@@ -543,7 +551,7 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         avg_price = ((trade_count - 1) * avg_price + live_order_price) / trade_count
 
                         # update P&L
-                        unrealized_pnl = current_pos * (last_price - avg_price)
+                        unrealized_pnl = calculate_unrealized_pnl(position=current_pos, last_price=last_price, avg_price=avg_price)
                         # realized_pnl unchanged
 
                         # now place our aggressive order and record trade information
@@ -571,11 +579,12 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         current_pos = current_pos + trade_size
 
                         #update avg(buy) price
-                        trade_count += trade_size
+                        trade_count += 1
                         avg_price = ( (trade_count - 1) * avg_price + ask_price ) / trade_count
 
                         # update P&L
-                        unrealized_pnl = current_pos * (last_price - avg_price) # realized_pnl unchanged
+                        unrealized_pnl = calculate_unrealized_pnl(position=current_pos, last_price=last_price, avg_price=avg_price)
+                        # realized_pnl unchanged
 
                         # now place our aggressive order and record trade information
                         record_trade(trade_df=trades, idx=index, tick=signal, fair_value=fair_value, market_price=last_price, trade_price=ask_price, avg_price=avg_price,
@@ -621,7 +630,7 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         avg_price = ((trade_count - 1) * avg_price + bid_price) / trade_count
 
                         # update P&L
-                        unrealized_pnl = current_pos * (last_price - avg_price)
+                        unrealized_pnl = calculate_unrealized_pnl(position=current_pos, last_price=last_price, avg_price=avg_price)
                         # realized_pnl unchanged
 
                         # now place our aggressive order and record trade information
@@ -641,7 +650,7 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         # avg(buy) price unchanged
 
                         # update P&L
-                        # unrealized_pnl = current_pos * (last_price - avg_price)
+                        # unrealized_pnl = calculate_unrealized_pnl(position=current_pos, last_price=last_price, avg_price=avg_price)
                         # realized_pnl unchanged
 
                         # don't need to record trade information
