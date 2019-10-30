@@ -104,8 +104,8 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
     
     # define our accumulator for the tick EMA
     message_type = 0   
-    #tick_coef = 1
-    #tick_window = 20
+    tick_coef = 1
+    tick_window = 20
     tick_factor = 0
     tick_ema_alpha = 2 / ( tick_window + 1 )
     prev_tick = 0
