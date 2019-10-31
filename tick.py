@@ -1,4 +1,5 @@
 import datetime
+import math
 import numpy as np
 import pandas as pd
 import time
@@ -9,9 +10,9 @@ from simtools import log_message
 # Lee-Ready tick strategy simulator
 
 # Record a trade in our trade array
-def record_trade( trade_df, idx, tick, fair_value, market_price, trade_price, avg_price, position, unrealized_pnl, realized_pnl, trade_shares, trade_type, trade_side ):
+def record_trade( trade_df, idx, tick, risk, fair_value, market_price, trade_price, avg_price, position, unrealized_pnl, realized_pnl, trade_shares, trade_type, trade_side ):
     # fill in the table
-    trade_df.loc[ idx ] = [ tick, fair_value, market_price, trade_price, avg_price, position, unrealized_pnl, realized_pnl, trade_shares, trade_type, trade_side ]
+    trade_df.loc[ idx ] = [ tick, risk, fair_value, market_price, trade_price, avg_price, position, unrealized_pnl, realized_pnl, trade_shares, trade_type, trade_side ]
     return
 
 def calculate_unrealized_pnl(position, last_price, avg_price):
@@ -76,7 +77,7 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
     #risk_factors = pd.Series( index=trading_day.index )
     
     # let's set up a container to hold trades. preinitialize with the index
-    trades = pd.DataFrame( columns = [ 'tick', 'fair_value', 'market_price', 'trade_price', 'avg_price', 'position', 'unrealized_pnl', 'realized_pnl', 'trade_shares', 'trade_type', 'trade_side' ], index=trading_day.index )
+    trades = pd.DataFrame( columns = [ 'tick', 'risk', 'fair_value', 'market_price', 'trade_price', 'avg_price', 'position', 'unrealized_pnl', 'realized_pnl', 'trade_shares', 'trade_type', 'trade_side' ], index=trading_day.index )
     
     # MAIN EVENT LOOP
     trade_count = 0
@@ -85,6 +86,7 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
 
     avg_price = 0.0
 
+    previous_pos = 0
     current_pos = 0
     trade_size = 1
 
@@ -104,7 +106,7 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
     
     # define our accumulator for the tick EMA
     message_type = 0   
-    tick_coef = 1
+    tick_coef = 1.0
     tick_window = 20
     tick_factor = 0
     tick_ema_alpha = 2 / ( tick_window + 1 )
@@ -114,7 +116,8 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
     # risk factor for part 2
     # TODO: implement and evaluate 
     risk_factor = 0.0
-    risk_coef = 0.0
+    risk_coef = 1.0
+    risk_denominator = 100000
     
     # signals
     signal: int = 0
@@ -145,17 +148,11 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
             # store the last trade price
             prev_price = last_price
 
-
             # now get the new data
             last_price = row.trade_px
             last_size = row.trade_size
             
             message_type = 't'
-
-
-            # CHECK OPEN ORDER(S) if we have a live order, 
-            # has it been filled by the trade that just happened?
-
 
             # TICK FACTOR
             # only update if it's a trade
@@ -174,8 +171,12 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                 # store the last tick
                 prev_tick = this_tick
 
-            # RISK FACTOR
+
             # TODO: For Part 2 Incorporate the Risk Factor
+            # RISK FACTOR
+            #if message_type == 't':
+            #    risk_factor = current_pos * avg_price / risk_denominator
+
 
             # PRICING LOGIC
             new_midpoint = bid_price + ( ask_price - bid_price ) / 2
@@ -186,15 +187,14 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
             # check inputs, skip of the midpoint is zero, we've got bogus data (or we're at start of day)
             if midpoint == 0:
                 continue
-            fair_value = midpoint + half_spread * ( ( tick_coef * tick_factor ) + ( risk_coef * risk_factor ) ) #tick_coef = 1
+            fair_value = midpoint + half_spread * ( ( tick_coef * tick_factor ) + ( risk_coef * risk_factor ) )
 
 
             # collect our data
-            fair_values[ index ] = fair_value
-            midpoints[ index ] = midpoint
-            #tick_factors[ index ] = tick_factor
+            # fair_values[ index ] = fair_value
+            # midpoints[ index ] = midpoint
+            # tick_factors[ index ] = tick_factor
             # TODO: add collectors for new factors
-
 
 
             # TRADING LOGIC
@@ -215,15 +215,15 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         # realized_pnl unchanged
 
                         # update position
+                        previous_pos = current_pos
                         current_pos = current_pos + abs(live_order_quantity)
 
                         # update avg(buy) price
-                        trade_count += 1
-                        avg_price = ( (trade_count - 1) * avg_price + live_order_price ) / trade_count
+                        avg_price = ( previous_pos * avg_price + live_order_quantity * live_order_price ) / current_pos
 
 
                         # now place our aggressive order and record trade information
-                        record_trade(trade_df=trades, idx=index, tick=signal, fair_value=fair_value,  market_price=last_price, trade_price=live_order_price, avg_price=avg_price,
+                        record_trade(trade_df=trades, idx=index, tick=signal, risk=risk_factor, fair_value=fair_value,  market_price=last_price, trade_price=live_order_price, avg_price=avg_price,
                                      position=current_pos, unrealized_pnl=unrealized_pnl, realized_pnl=realized_pnl,trade_shares=trade_size,
                                      trade_type=order_type, trade_side=order_side)
 
@@ -247,8 +247,8 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         # avg(buy) price unchanged
 
                         # now place our aggressive order and record trade information
-                        record_trade(trade_df=trades, idx=index, tick=signal, fair_value=fair_value, market_price=last_price, trade_price=live_order_price, avg_price=avg_price,
-                                     position=current_pos, unrealized_pnl=unrealized_pnl, realized_pnl=realized_pnl, trade_shares=trade_size,
+                        record_trade(trade_df=trades, idx=index, tick=signal, risk=risk_factor, fair_value=fair_value,  market_price=last_price, trade_price=live_order_price, avg_price=avg_price,
+                                     position=current_pos, unrealized_pnl=unrealized_pnl, realized_pnl=realized_pnl,trade_shares=trade_size,
                                      trade_type=order_type, trade_side=order_side)
 
                         # deal with live order
@@ -272,15 +272,15 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         # realized_pnl unchanged
 
                         # update position
+                        previous_pos = current_pos
                         current_pos = current_pos + trade_size
 
                         # update avg(buy) price
-                        trade_count += 1
-                        avg_price = ( (trade_count - 1) * avg_price + ask_price ) / trade_count
+                        avg_price = ( previous_pos * avg_price + trade_size * ask_price ) / current_pos
 
                         # now place our aggressive order and record trade information
-                        record_trade(trade_df=trades, idx=index, tick=signal, fair_value=fair_value, market_price=last_price, trade_price=ask_price, avg_price=avg_price,
-                                     position=current_pos, unrealized_pnl=unrealized_pnl, realized_pnl=realized_pnl, trade_shares=trade_size,
+                        record_trade(trade_df=trades, idx=index, tick=signal, risk=risk_factor, fair_value=fair_value,  market_price=last_price, trade_price=ask_price, avg_price=avg_price,
+                                     position=current_pos, unrealized_pnl=unrealized_pnl, realized_pnl=realized_pnl,trade_shares=trade_size,
                                      trade_type=order_type, trade_side=order_side)
 
                         # deal with live order
@@ -303,7 +303,7 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
 
                         # send limit order
                         live_order_quantity = 1 * trade_size  # = +100
-                        live_order_price = fair_value
+                        live_order_price = bid_price
                         live_order = True
 
                 elif signal == -1:
@@ -324,8 +324,8 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         # avg(buy) price unchanged
 
                         # now place our aggressive order and record trade information
-                        record_trade(trade_df=trades, idx=index, tick=signal, fair_value=fair_value, market_price=last_price, trade_price=bid_price, avg_price=avg_price,
-                                     position=current_pos, unrealized_pnl=unrealized_pnl, realized_pnl=realized_pnl, trade_shares=trade_size,
+                        record_trade(trade_df=trades, idx=index, tick=signal, risk=risk_factor, fair_value=fair_value,  market_price=last_price, trade_price=bid_price, avg_price=avg_price,
+                                     position=current_pos, unrealized_pnl=unrealized_pnl, realized_pnl=realized_pnl,trade_shares=trade_size,
                                      trade_type=order_type, trade_side=order_side)
 
                         # deal with live order
@@ -348,7 +348,7 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
 
                         # send limit order
                         live_order_quantity = 1 * trade_size  # = 100
-                        live_order_price = fair_value
+                        live_order_price = ask_price
                         live_order = True
 
                 else: # signal = 0
@@ -372,7 +372,7 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         # avg(sell) price unchanged
 
                         # now place our aggressive order and record trade information
-                        record_trade(trade_df=trades, idx=index, tick=signal, fair_value=fair_value, market_price=last_price, trade_price=live_order_price, avg_price=avg_price,
+                        record_trade(trade_df=trades, idx=index, tick=signal, risk=risk_factor, fair_value=fair_value,  market_price=last_price, trade_price=live_order_price, avg_price=avg_price,
                                      position=current_pos, unrealized_pnl=unrealized_pnl, realized_pnl=realized_pnl,trade_shares=trade_size,
                                      trade_type=order_type, trade_side=order_side)
 
@@ -391,15 +391,15 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         # realized_pnl unchanged
 
                         # update position
+                        previous_pos = current_pos
                         current_pos = current_pos - abs(live_order_quantity)
 
                         # update avg(buy) price
-                        trade_count += 1
-                        avg_price = ((trade_count - 1) * avg_price + live_order_price) / trade_count
+                        avg_price = (previous_pos * avg_price - live_order_quantity * live_order_price) / current_pos
 
                         # now place our aggressive order and record trade information
-                        record_trade(trade_df=trades, idx=index, tick=signal, fair_value=fair_value, market_price=last_price, trade_price=live_order_price, avg_price=avg_price,
-                                     position=current_pos, unrealized_pnl=unrealized_pnl, realized_pnl=realized_pnl, trade_shares=trade_size,
+                        record_trade(trade_df=trades, idx=index, tick=signal, risk=risk_factor, fair_value=fair_value,  market_price=last_price, trade_price=live_order_price, avg_price=avg_price,
+                                     position=current_pos, unrealized_pnl=unrealized_pnl, realized_pnl=realized_pnl,trade_shares=trade_size,
                                      trade_type=order_type, trade_side=order_side)
 
                         # deal with live order
@@ -428,8 +428,8 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         # avg(sell) price unchanged
 
                         # now place our aggressive order and record trade information
-                        record_trade(trade_df=trades, idx=index, tick=signal, fair_value=fair_value, market_price=last_price, trade_price=ask_price, avg_price=avg_price,
-                                     position=current_pos, unrealized_pnl=unrealized_pnl, realized_pnl=realized_pnl, trade_shares=trade_size,
+                        record_trade(trade_df=trades, idx=index, tick=signal, risk=risk_factor, fair_value=fair_value,  market_price=last_price, trade_price=ask_price, avg_price=avg_price,
+                                     position=current_pos, unrealized_pnl=unrealized_pnl, realized_pnl=realized_pnl,trade_shares=trade_size,
                                      trade_type=order_type, trade_side=order_side)
 
                         # deal with live order
@@ -452,7 +452,7 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
 
                         # send limit order
                         live_order_quantity = 1 * trade_size  # = +100
-                        live_order_price = fair_value
+                        live_order_price = bid_price
                         live_order = True
 
                 elif signal == -1:
@@ -468,15 +468,16 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         # realized_pnl unchanged
 
                         # update position
+                        previous_pos = current_pos
                         current_pos = current_pos - trade_size
 
                         # update avg(buy) price
                         trade_count += 1
-                        avg_price = ((trade_count - 1) * avg_price + bid_price) / trade_count
+                        avg_price = (previous_pos * avg_price - trade_size * bid_price) / current_pos
 
                         # now place our aggressive order and record trade information
-                        record_trade(trade_df=trades, idx=index, tick=signal, fair_value=fair_value, market_price=last_price, trade_price=bid_price, avg_price=avg_price,
-                                     position=current_pos, unrealized_pnl=unrealized_pnl, realized_pnl=realized_pnl, trade_shares=trade_size,
+                        record_trade(trade_df=trades, idx=index, tick=signal, risk=risk_factor, fair_value=fair_value,  market_price=last_price, trade_price=bid_price, avg_price=avg_price,
+                                     position=current_pos, unrealized_pnl=unrealized_pnl, realized_pnl=realized_pnl,trade_shares=trade_size,
                                      trade_type=order_type, trade_side=order_side)
 
                         # deal with live order
@@ -499,7 +500,7 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
 
                         # send limit order
                         live_order_quantity = 1 * trade_size  # = 100
-                        live_order_price = fair_value
+                        live_order_price = ask_price
                         live_order = True
 
                 else: # signal = 0
@@ -522,14 +523,14 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         # realized_pnl unchanged
 
                         # update position
+                        previous_pos = current_pos
                         current_pos = current_pos + abs(live_order_quantity)
 
                         # update avg(buy) price
-                        trade_count += 1
-                        avg_price = ( (trade_count - 1) * avg_price + live_order_price ) / trade_count
+                        avg_price = ( previous_pos * avg_price + live_order_quantity * live_order_price ) / current_pos
 
                         # now place our aggressive order and record trade information
-                        record_trade(trade_df=trades, idx=index, tick=signal, fair_value=fair_value, market_price=last_price, trade_price=live_order_price, avg_price=avg_price,
+                        record_trade(trade_df=trades, idx=index, tick=signal, risk=risk_factor, fair_value=fair_value,  market_price=last_price, trade_price=live_order_price, avg_price=avg_price,
                                      position=current_pos, unrealized_pnl=unrealized_pnl, realized_pnl=realized_pnl,trade_shares=trade_size,
                                      trade_type=order_type, trade_side=order_side)
 
@@ -548,15 +549,15 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         # realized_pnl unchanged
 
                         # update position
+                        previous_pos = current_pos
                         current_pos = current_pos - abs(live_order_quantity)
 
                         # update avg(buy) price
-                        trade_count += 1
-                        avg_price = ((trade_count - 1) * avg_price + live_order_price) / trade_count
+                        avg_price = (previous_pos * avg_price - live_order_quantity * live_order_price) / current_pos
 
                         # now place our aggressive order and record trade information
-                        record_trade(trade_df=trades, idx=index, tick=signal, fair_value=fair_value, market_price=last_price, trade_price=live_order_price, avg_price=avg_price,
-                                     position=current_pos, unrealized_pnl=unrealized_pnl, realized_pnl=realized_pnl, trade_shares=trade_size,
+                        record_trade(trade_df=trades, idx=index, tick=signal, risk=risk_factor, fair_value=fair_value,  market_price=last_price, trade_price=live_order_price, avg_price=avg_price,
+                                     position=current_pos, unrealized_pnl=unrealized_pnl, realized_pnl=realized_pnl,trade_shares=trade_size,
                                      trade_type=order_type, trade_side=order_side)
 
                         # deal with live order
@@ -580,15 +581,15 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         # realized_pnl unchanged
 
                         # update position
+                        previous_pos = current_pos
                         current_pos = current_pos + trade_size
 
                         #update avg(buy) price
-                        trade_count += 1
-                        avg_price = ( (trade_count - 1) * avg_price + ask_price ) / trade_count
+                        avg_price = ( previous_pos * avg_price + trade_size * ask_price ) / current_pos
 
                         # now place our aggressive order and record trade information
-                        record_trade(trade_df=trades, idx=index, tick=signal, fair_value=fair_value, market_price=last_price, trade_price=ask_price, avg_price=avg_price,
-                                     position=current_pos, unrealized_pnl=unrealized_pnl, realized_pnl=realized_pnl, trade_shares=trade_size,
+                        record_trade(trade_df=trades, idx=index, tick=signal, risk=risk_factor, fair_value=fair_value,  market_price=last_price, trade_price=ask_price, avg_price=avg_price,
+                                     position=current_pos, unrealized_pnl=unrealized_pnl, realized_pnl=realized_pnl,trade_shares=trade_size,
                                      trade_type=order_type, trade_side=order_side)
 
                         # deal with live order
@@ -611,7 +612,7 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
 
                         # send limit order
                         live_order_quantity = 1 * trade_size  # = +100
-                        live_order_price = fair_value
+                        live_order_price = bid_price
                         live_order = True
 
                 elif signal == -1:
@@ -627,15 +628,15 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
                         # realized_pnl unchanged
 
                         # update position
+                        previous_pos = current_pos
                         current_pos = current_pos - trade_size
 
                         # update avg(buy) price
-                        trade_count += 1
-                        avg_price = ((trade_count - 1) * avg_price + bid_price) / trade_count
+                        avg_price = (previous_pos * avg_price - trade_size * bid_price) / current_pos
 
                         # now place our aggressive order and record trade information
-                        record_trade(trade_df=trades, idx=index, tick=signal, fair_value=fair_value, market_price=last_price, trade_price=bid_price, avg_price=avg_price,
-                                     position=current_pos, unrealized_pnl=unrealized_pnl, realized_pnl=realized_pnl, trade_shares=trade_size,
+                        record_trade(trade_df=trades, idx=index, tick=signal, risk=risk_factor, fair_value=fair_value,  market_price=last_price, trade_price=bid_price, avg_price=avg_price,
+                                     position=current_pos, unrealized_pnl=unrealized_pnl, realized_pnl=realized_pnl,trade_shares=trade_size,
                                      trade_type=order_type, trade_side=order_side)
 
                         # deal with live order
@@ -657,7 +658,7 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
 
                         # send limit order
                         live_order_quantity = 1 * trade_size  # = -100
-                        live_order_price = fair_value
+                        live_order_price = ask_price
                         live_order = True
                         
                 else: # signal = 0
