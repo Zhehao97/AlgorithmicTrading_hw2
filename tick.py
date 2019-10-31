@@ -119,6 +119,10 @@ def algo_loop( trading_day, risk_adj = 0, risk_denominator=1, tick_coef = 1, tic
     # TODO: implement and evaluate 
     risk_factor = 0.0
     risk_coef = -1.0
+    risk_window = 20
+    risk_ema_alpha = 2 / ( risk_window + 1 )
+    prev_risk = 0
+    this_risk = 0
     
     # signals
     signal: int = 0
@@ -177,7 +181,19 @@ def algo_loop( trading_day, risk_adj = 0, risk_denominator=1, tick_coef = 1, tic
             # RISK FACTOR
             # use sigmoid function to map any real number to the range(-1,1)
             if message_type == 't' and risk_adj == 1:
-                risk_factor = sigmoid(current_pos * avg_price / risk_denominator)
+                # call the risk
+                this_risk = sigmoid(current_pos * avg_price / risk_denominator)
+                if this_risk == 0:
+                    this_risk = prev_risk
+
+                # now calculate the risk factor
+                if risk_factor == 0:
+                    risk_factor = this_risk
+                else:
+                    risk_factor = ( risk_ema_alpha * this_risk ) + ( 1 - risk_ema_alpha ) * risk_factor
+
+                #store the last risk
+                prev_risk = this_risk
 
 
             # PRICING LOGIC
@@ -218,7 +234,7 @@ def algo_loop( trading_day, risk_adj = 0, risk_denominator=1, tick_coef = 1, tic
 
                         # update position
                         previous_pos = current_pos
-                        current_pos = current_pos + abs(live_order_quantity)
+                        current_pos = current_pos + live_order_quantity
 
                         # update avg(buy) price
                         avg_price = ( previous_pos * avg_price + live_order_quantity * live_order_price ) / current_pos
@@ -244,7 +260,7 @@ def algo_loop( trading_day, risk_adj = 0, risk_denominator=1, tick_coef = 1, tic
                         realized_pnl = calculate_realized_pnl(realized_pnl=realized_pnl, trade_size=trade_size, order_price=live_order_price, avg_price=avg_price)
 
                         # update position
-                        current_pos = current_pos - abs(live_order_quantity)
+                        current_pos = current_pos - live_order_quantity
 
                         # avg(buy) price unchanged
 
@@ -369,7 +385,7 @@ def algo_loop( trading_day, risk_adj = 0, risk_denominator=1, tick_coef = 1, tic
                         realized_pnl = calculate_realized_pnl(realized_pnl=realized_pnl, trade_size=trade_size, order_price=live_order_price, avg_price=avg_price)
 
                         # update position
-                        current_pos = current_pos + abs(live_order_quantity)
+                        current_pos = current_pos + live_order_quantity
 
                         # avg(sell) price unchanged
 
@@ -394,7 +410,7 @@ def algo_loop( trading_day, risk_adj = 0, risk_denominator=1, tick_coef = 1, tic
 
                         # update position
                         previous_pos = current_pos
-                        current_pos = current_pos - abs(live_order_quantity)
+                        current_pos = current_pos - live_order_quantity
 
                         # update avg(buy) price
                         avg_price = (previous_pos * avg_price - live_order_quantity * live_order_price) / current_pos
@@ -526,7 +542,7 @@ def algo_loop( trading_day, risk_adj = 0, risk_denominator=1, tick_coef = 1, tic
 
                         # update position
                         previous_pos = current_pos
-                        current_pos = current_pos + abs(live_order_quantity)
+                        current_pos = current_pos + live_order_quantity
 
                         # update avg(buy) price
                         avg_price = ( previous_pos * avg_price + live_order_quantity * live_order_price ) / current_pos
@@ -552,7 +568,7 @@ def algo_loop( trading_day, risk_adj = 0, risk_denominator=1, tick_coef = 1, tic
 
                         # update position
                         previous_pos = current_pos
-                        current_pos = current_pos - abs(live_order_quantity)
+                        current_pos = current_pos - live_order_quantity
 
                         # update avg(buy) price
                         avg_price = (previous_pos * avg_price - live_order_quantity * live_order_price) / current_pos
