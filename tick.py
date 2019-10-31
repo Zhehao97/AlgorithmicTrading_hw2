@@ -1,5 +1,4 @@
 import datetime
-import math
 import numpy as np
 import pandas as pd
 import time
@@ -9,6 +8,9 @@ from simtools import log_message
 
 
 # Lee-Ready tick strategy simulator
+
+def sigmoid(x):
+    return 2/(1 + np.exp(-x)) - 1
 
 # Record a trade in our trade array
 def record_trade(trade_df, idx, tick, risk, fair_value, market_price, trade_price, avg_price, position, unrealized_pnl,
@@ -63,9 +65,10 @@ def trade_statistics(trade_df):
 
 
 # MAIN ALGO LOOP
-def algo_loop(trading_day, tick_coef=1, tick_window=20):
-    log_message('Beginning Tick Strategy run')
-    # log_message('TODO: remove this message. Simply a test to see how closely you are reading this code: SEEN, THANKS!!')
+def algo_loop( trading_day, risk_adj = 0, risk_denominator=1, tick_coef = 1, tick_window = 20 ):
+    log_message( 'Beginning Tick Strategy run' )
+    #log_message( 'TODO: remove this message. Simply a test to see how closely you are reading this code' )
+
 
     round_lot = 100
     avg_spread = (trading_day.ask_px - trading_day.bid_px).mean()
@@ -123,8 +126,12 @@ def algo_loop(trading_day, tick_coef=1, tick_window=20):
     # risk factor for part 2
     # TODO: implement and evaluate
     risk_factor = 0.0
-    risk_coef = 1.0
-    risk_denominator = 100000
+    risk_coef = -1.0
+    risk_window = 20
+    risk_ema_alpha = 2 / ( risk_window + 1 )
+    prev_risk = 0
+    this_risk = 0
+    
 
     # signals
     signal: int = 0
@@ -180,9 +187,23 @@ def algo_loop(trading_day, tick_coef=1, tick_window=20):
 
             # TODO: For Part 2 Incorporate the Risk Factor
             # RISK FACTOR
-            # if message_type == 't':
-            #    risk_factor = current_pos * avg_price / risk_denominator
+            # use sigmoid function to map any real number to the range(-1,1)
+            if message_type == 't' and risk_adj == 1:
+                # call the risk
+                this_risk = sigmoid(current_pos * avg_price / risk_denominator)
+                if this_risk == 0:
+                    this_risk = prev_risk
 
+                # now calculate the risk factor
+                if risk_factor == 0:
+                    risk_factor = this_risk
+                else:
+                    risk_factor = ( risk_ema_alpha * this_risk ) + ( 1 - risk_ema_alpha ) * risk_factor
+
+                #store the last risk
+                prev_risk = this_risk
+
+                
             # PRICING LOGIC
             new_midpoint = bid_price + (ask_price - bid_price) / 2
             if new_midpoint > 0:
