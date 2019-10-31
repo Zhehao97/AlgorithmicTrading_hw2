@@ -1,5 +1,4 @@
 import datetime
-import math
 import numpy as np
 import pandas as pd
 import time
@@ -8,6 +7,9 @@ import sys
 from simtools import log_message
 
 # Lee-Ready tick strategy simulator
+
+def sigmoid(x):
+    return 2/(1 + np.exp(-x)) - 1
 
 # Record a trade in our trade array
 def record_trade( trade_df, idx, tick, risk, fair_value, market_price, trade_price, avg_price, position, unrealized_pnl, realized_pnl, trade_shares, trade_type, trade_side ):
@@ -58,7 +60,7 @@ def trade_statistics( trade_df ):
 
     
 # MAIN ALGO LOOP
-def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
+def algo_loop( trading_day, risk_adj = 0, risk_denominator=1, tick_coef = 1, tick_window = 20 ):
     log_message( 'Beginning Tick Strategy run' )
     #log_message( 'TODO: remove this message. Simply a test to see how closely you are reading this code' )
 
@@ -116,8 +118,7 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
     # risk factor for part 2
     # TODO: implement and evaluate 
     risk_factor = 0.0
-    risk_coef = 1.0
-    risk_denominator = 100000
+    risk_coef = -1.0
     
     # signals
     signal: int = 0
@@ -174,8 +175,9 @@ def algo_loop( trading_day, tick_coef = 1, tick_window = 20 ):
 
             # TODO: For Part 2 Incorporate the Risk Factor
             # RISK FACTOR
-            #if message_type == 't':
-            #    risk_factor = current_pos * avg_price / risk_denominator
+            # use sigmoid function to map any real number to the range(-1,1)
+            if message_type == 't' and risk_adj == 1:
+                risk_factor = sigmoid(current_pos * avg_price / risk_denominator)
 
 
             # PRICING LOGIC
