@@ -47,7 +47,9 @@ def trade_statistics(trade_df):
     worst_unrealized_pnl = trade_df['unrealized_pnl'].min()
 
     # TODO: calculate total P&L
-    total_pnl = trade_df['realized_pnl'][-1]
+    total_real_pnl = trade_df['realized_pnl'][-1]
+    total_unreal_pnl = trade_df['unrealized_pnl'][-1]
+    total_pnl= total_real_pnl + total_unreal_pnl
 
     return {'PNL': intraday_pnl,
             'max_long_Position': max_long_position,
@@ -55,7 +57,9 @@ def trade_statistics(trade_df):
             'ending_Position': ending_position,
             'best_unrealized_PNL': best_unrealized_pnl,
             'worst_unrealized_PNL': worst_unrealized_pnl,
-            'total_realized_PNL': total_pnl
+            'total_realized_PNL': total_real_pnl,
+            'total_unrealized_PNL': total_unreal_pnl,
+            'total_PNL': total_pnl
             }
 
 
