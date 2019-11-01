@@ -65,14 +65,14 @@ def trade_statistics(trade_df):
 
 
 # MAIN ALGO LOOP
-def algo_loop( trading_day, risk_adj = 0, risk_denominator=1, tick_coef = 1, tick_window = 20 ):
+def algo_loop( trading_day, risk_adj = 0, risk_denominator=1, tick_coef = 1, tick_window = 20, spread_factor = 2,
+               risk_factor=0):
     log_message( 'Beginning Tick Strategy run' )
     #log_message( 'TODO: remove this message. Simply a test to see how closely you are reading this code' )
 
 
     round_lot = 100
     avg_spread = (trading_day.ask_px - trading_day.bid_px).mean()
-    half_spread = avg_spread / 2
     print("Average stock spread for sample: {:.4f}".format(avg_spread))
 
     # init our price and volume variables
@@ -116,8 +116,7 @@ def algo_loop( trading_day, risk_adj = 0, risk_denominator=1, tick_coef = 1, tic
 
     # define our accumulator for the tick EMA
     message_type = 0
-    tick_coef = 1.0
-    tick_window = 20
+
     tick_factor = 0
     tick_ema_alpha = 2 / (tick_window + 1)
     prev_tick = 0
@@ -125,10 +124,8 @@ def algo_loop( trading_day, risk_adj = 0, risk_denominator=1, tick_coef = 1, tic
 
     # risk factor for part 2
     # TODO: implement and evaluate
-    risk_factor = 0.0
+
     risk_coef = -1.0
-    risk_window = 20
-    risk_ema_alpha = 2 / ( risk_window + 1 )
     prev_risk = 0
     this_risk = 0
     
@@ -190,7 +187,7 @@ def algo_loop( trading_day, risk_adj = 0, risk_denominator=1, tick_coef = 1, tic
             # use sigmoid function to map any real number to the range(-1,1)
             if message_type == 't' and risk_adj == 1:
                 # call the risk
-                this_risk = sigmoid(current_pos * avg_price / risk_denominator)
+                this_risk = (1/spread_factor)*sigmoid(current_pos * avg_price / risk_denominator)
                 if this_risk == 0:
                     this_risk = prev_risk
 
@@ -198,7 +195,7 @@ def algo_loop( trading_day, risk_adj = 0, risk_denominator=1, tick_coef = 1, tic
                 if risk_factor == 0:
                     risk_factor = this_risk
                 else:
-                    risk_factor = ( risk_ema_alpha * this_risk ) + ( 1 - risk_ema_alpha ) * risk_factor
+                    risk_factor = this_risk
 
                 #store the last risk
                 prev_risk = this_risk
@@ -213,7 +210,7 @@ def algo_loop( trading_day, risk_adj = 0, risk_denominator=1, tick_coef = 1, tic
             # check inputs, skip of the midpoint is zero, we've got bogus data (or we're at start of day)
             if midpoint == 0:
                 continue
-            fair_value = midpoint + half_spread * ((tick_coef * tick_factor) + (risk_coef * risk_factor))
+            fair_value = midpoint + (ask_price - bid_price)/spread_factor * ((tick_coef * tick_factor) + (risk_coef * risk_factor))
 
             # collect our data
             # fair_values[ index ] = fair_value
